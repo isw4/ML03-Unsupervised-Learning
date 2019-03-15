@@ -3,9 +3,14 @@
 Code and data can be found at: https://github.com/isw4/ML03-Unsupervised-Learning
 
 ## Directories
-src/        Contains the source code  
-data/       Contains the raw and cleaned csv data files, along with some description of each set  
-graphs/     Contains graphs that are output by the various experiments
+**src/**  
+    Contains the source code  
+**data/**  
+    Contains the raw and cleaned csv data files, along with some description of each set  
+**logs/**  
+    Contains data output after running the experiments  
+**graphs/**  
+    Contains graphs that are generated from the logs
 
 
 ## Setup
@@ -30,3 +35,32 @@ graphs/     Contains graphs that are output by the various experiments
 
 
 ## Running the datasets
+
+From the root directory:  
+
+To make fresh processed csv data from the raw data(for both wine and pet datasets):
+~~~
+python ./src/data_processing.py
+~~~
+
+To run the experiments:
+~~~
+python ./src/wine.py
+~~~
+
+or
+
+~~~
+python ./src/pet.py
+~~~
+
+The data from the experiments will be saved into the ./logs/ directory. You can then plot the data with:
+~~~
+python ./src/plot_wine.py
+~~~
+
+or
+
+~~~
+python ./src/plot_pet.py
+~~~
