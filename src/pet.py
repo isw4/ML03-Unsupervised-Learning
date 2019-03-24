@@ -1,10 +1,17 @@
 import pandas as pd
 import numpy as np
 from time import clock
+
+from scipy.stats import kurtosis
 from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
 from sklearn.decomposition import PCA, FastICA
-from sklearn.metrics import adjusted_rand_score, homogeneity_score, completeness_score, silhouette_score
+from sklearn.random_projection import GaussianRandomProjection
+from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.metrics import adjusted_rand_score, homogeneity_score, completeness_score, silhouette_score, accuracy_score
+
+import utils
 
 
 def kmeans(X, Y):
@@ -70,13 +77,337 @@ def gmm(X, Y):
 			f.write(out)
 
 
+def pca(X, Y):
+	print("Running PCA")
+
+	X_train, X_test, Y_train, Y_test = utils.split(X, Y)
+
+	# Run PCA on training data
+	pca = PCA()
+	pca.fit(X_train)
+	eigenvalues = pca.explained_variance_
+
+	# Transform training and testing data
+	TX_train = pca.transform(X_train)
+	TX_test = pca.transform(X_test)
+
+	# Evaluate on boosting model by incrementally adding components to train
+	acc = []
+	for i in range(0, len(eigenvalues)):
+		model = AdaBoostClassifier(n_estimators=150, learning_rate=0.1)
+		model.fit(TX_train[:, :i+1], Y_train)
+		Y_pred = model.predict(TX_test[:, :i+1])
+		acc.append(accuracy_score(Y_test, Y_pred))
+
+	# Opening log file
+	log_path = '../logs/pet_pca.csv'
+	with open(log_path, 'w') as f:
+		f.write('component,eigenvalues,accuracy\n')
+
+	# Logging metrics
+	for i in range(0, len(eigenvalues)):
+		with open(log_path, 'a') as f:
+			out = '{},{},{}\n'.format(i, eigenvalues[i], acc[i])
+			f.write(out)
+
+
+def ica(X, Y):
+	print("Running ICA")
+
+	X_train, X_test, Y_train, Y_test = utils.split(X, Y)
+
+	n = X.shape[1]  # maximum number of features to get out from ICA
+	# Running ICA with incrementing number of components and evaluating kurtosis and accuracy on a model
+	avg_kur = []
+	acc = []
+	for i in range(0, n):
+		ica = FastICA(n_components=i+1)
+		ica.fit(X_train)
+
+		# Transform training and testing data
+		TX_train = ica.transform(X_train)
+		TX_test = ica.transform(X_test)
+
+		# Computing kurtosis of training data
+		kur = kurtosis(TX_train, 0)     # Already subtracted 3 to get "excess" kurtosis
+		avg_kur.append(kur.mean())
+
+		# Evaluate on boosting model
+		model = AdaBoostClassifier(n_estimators=150, learning_rate=0.1)
+		model.fit(TX_train, Y_train)
+		Y_pred = model.predict(TX_test)
+		acc.append(accuracy_score(Y_test, Y_pred))
+
+	# Opening log file
+	log_path = '../logs/pet_ica.csv'
+	with open(log_path, 'w') as f:
+		f.write('components,mean_kurtosis,accuracy\n')
+
+	# Logging metrics
+	for i in range(0, n):
+		with open(log_path, 'a') as f:
+			out = '{},{},{}\n'.format(i+1, avg_kur[i], acc[i])
+			f.write(out)
+
+
+def rca(X, Y):
+	print("Running RCA")
+	iterations = 10  # Number of iterations of rca to perform to average over
+
+	X_train, X_test, Y_train, Y_test = utils.split(X, Y)
+
+	n = X.shape[1]  # maximum number of features to get out from RCA
+	# Running RCA with incrementing number of components and evaluating average accuracy on a model
+	acc = []
+	for i in range(0, n):
+		temp_acc = []
+		for _ in range(0, iterations):
+			rca = GaussianRandomProjection(n_components=i+1)
+			rca.fit(X_train)
+
+			# Transform training and testing data
+			TX_train = rca.transform(X_train)
+			TX_test = rca.transform(X_test)
+
+			# Evaluate on boosting model
+			model = AdaBoostClassifier(n_estimators=150, learning_rate=0.1)
+			model.fit(TX_train, Y_train)
+			Y_pred = model.predict(TX_test)
+			temp_acc.append(accuracy_score(Y_test, Y_pred))
+		acc.append(np.mean(temp_acc))
+
+	# Opening log file
+	log_path = '../logs/pet_rca.csv'
+	with open(log_path, 'w') as f:
+		f.write('components,accuracy\n')
+
+	# Logging metrics
+	for i in range(0, n):
+		with open(log_path, 'a') as f:
+			out = '{},{}\n'.format(i + 1, acc[i])
+			f.write(out)
+
+
+def rf(X, Y):
+	print("Running Random Forest")
+
+	X_train, X_test, Y_train, Y_test = utils.split(X, Y)
+
+	# Run LRF on training data
+	rf = RandomForestClassifier(n_estimators=100, max_depth=5, n_jobs=-1)
+	rf.fit(X_train, Y_train)
+	importances = rf.feature_importances_
+
+	sorted_impt = np.argsort(importances)[::-1] # Sorted in dec order
+
+	# Evaluate on boosting model by incrementally adding components to train
+	acc = []
+	for i in range(0, len(importances)):
+		col_ix = sorted_impt[:i+1]   # Taking top i features
+		model = AdaBoostClassifier(n_estimators=150, learning_rate=0.1)
+		model.fit(X_train.iloc[:, col_ix], Y_train)
+		Y_pred = model.predict(X_test.iloc[:, col_ix])
+		acc.append(accuracy_score(Y_test, Y_pred))
+
+	# Opening log file
+	log_path = '../logs/pet_rf_impt.csv'
+	with open(log_path, 'w') as f:
+		f.write('component,importance\n')
+
+	# Logging metrics
+	for i in range(0, len(importances)):
+		with open(log_path, 'a') as f:
+			out = '{},{}\n'.format(i, importances[i])
+			f.write(out)
+
+	# Opening log file
+	log_path = '../logs/pet_rf_acc.csv'
+	with open(log_path, 'w') as f:
+		f.write('components,accuracy\n')
+
+	# Logging metrics
+	for i in range(0, len(importances)):
+		with open(log_path, 'a') as f:
+			out = '{},{}\n'.format(i+1, acc[i])
+			f.write(out)
+
+
+def kmeans_after_red(X, Y):
+	print("Running K-means after dimension reduction")
+
+	# Range of k to test
+	krange = np.arange(2, 50)
+	pca_num_components = 3
+	ica_num_components = 2
+	rca_num_components = 3
+	rf_num_components = 3
+
+	# Dimension Reduction and transforming data to fit
+	X_pca, X_ica, X_rca, X_rf = utils.transform4(X, Y, pca_num_components, ica_num_components,
+	                                             rca_num_components, rf_num_components)
+
+	# Opening log file
+	log_path = '../logs/pet_reduced_kmeans.csv'
+	with open(log_path, 'w') as f:
+		f.write('k,ari,distortion,pca_ari,pca_distortion,ica_ari,ica_distortion,rca_ari,rca_distortion,rf_ari,rf_distortion\n')
+
+	transformed_X = [X, X_pca, X_ica, X_rca, X_rf]
+	for k in krange:
+		output = '{}'.format(k)
+
+		for TX in transformed_X:
+			# Computing k means
+			kmeans_model = KMeans(k, init='random', n_jobs=-1).fit(TX)
+			clusters = kmeans_model.predict(TX)
+
+			# Computing metrics
+			ari = adjusted_rand_score(Y, clusters)
+			dis = kmeans_model.inertia_
+
+			# Appending to output
+			output = output + ',{},{}'.format(ari, dis)
+
+		# Logging metrics
+		with open(log_path, 'a') as f:
+			output = output + '\n'
+			f.write(output)
+
+
+def gmm_after_red(X, Y):
+	print("Running GMM after dimension reduction")
+
+	# Range of k to test
+	krange = np.arange(2, 50)
+	pca_num_components = 3
+	ica_num_components = 2
+	rca_num_components = 3
+	rf_num_components = 3
+
+	# Dimension Reduction and transforming data to fit
+	X_pca, X_ica, X_rca, X_rf = utils.transform4(X, Y, pca_num_components, ica_num_components,
+	                                             rca_num_components, rf_num_components)
+
+	# Opening log file
+	log_path = '../logs/pet_reduced_gmm.csv'
+	with open(log_path, 'w') as f:
+		f.write(
+			'k,ari,aic,bic,pca_ari,pca_aic,pca_bic,ica_ari,ica_aic,ica_bic,rca_ari,rca_aic,rca_bic,rf_ari,rf_aic,rf_bic\n')
+
+	transformed_X = [X, X_pca, X_ica, X_rca, X_rf]
+	for k in krange:
+		output = '{}'.format(k)
+
+		for TX in transformed_X:
+			# Computing k means
+			gmm_model = GaussianMixture(k, n_init=10).fit(TX)
+			clusters = gmm_model.predict(TX)
+
+			# Computing metrics
+			ari = adjusted_rand_score(Y, clusters)
+			aic = gmm_model.aic(TX)
+			bic = gmm_model.bic(TX)
+
+			# Appending to output
+			output = output + ',{},{},{}'.format(ari, aic, bic)
+
+		# Logging metrics
+		with open(log_path, 'a') as f:
+			output = output + '\n'
+			f.write(output)
+
+
+def nn(X, Y):
+	print("Running neural networks")
+
+	X_train, X_test, Y_train, Y_test = utils.split(X, Y)
+
+	# Hyper-parameters
+	num_hidden_layers = 10
+	num_hidden_units = 50
+	pca_num_components = 3
+	ica_num_components = 2
+	rca_num_components = 3
+	rf_num_components = 3
+
+
+	hidden_layer_sizes = []  ## nn parameter
+	for n in range(1, num_hidden_layers + 1):
+		hidden_layer_sizes.append(tuple(num_hidden_units for _ in range(n)))
+
+	# Dimension Reduction and transforming data to fit
+	pca = PCA(n_components=pca_num_components).fit(X_train)
+	X_train_pca = pca.transform(X_train)
+	X_test_pca = pca.transform(X_test)
+
+	ica = FastICA(n_components=ica_num_components).fit(X_train)
+	X_train_ica = ica.transform(X_train)
+	X_test_ica = ica.transform(X_test)
+
+	rca = GaussianRandomProjection(n_components=rca_num_components).fit(X_train)
+	X_train_rca = rca.transform(X_train)
+	X_test_rca = rca.transform(X_test)
+
+	print("RF fitting")
+	rf = RandomForestClassifier(n_estimators=100, max_depth=5, n_jobs=-1)
+	rf.fit(X_train, Y_train)
+	importances = rf.feature_importances_
+	sorted_impt = np.argsort(importances)[::-1]  # Sorted in dec order
+	X_train_rf = X_train.iloc[:, sorted_impt[:rf_num_components]]
+	X_test_rf = X_test.iloc[:, sorted_impt[:rf_num_components]]
+	print("RF fitting done")
+
+	# Opening log file
+	log_path = '../logs/pet_nnred_@shape@.csv'.replace('@shape@', '{}l{}u'.format(num_hidden_layers, num_hidden_units))
+	with open(log_path, 'w') as f:
+		f.write('model_shape,train_accuracy,test_accuracy,'+
+		        'pca_train_accuracy,pca_test_accuracy,'+
+		        'ica_train_accuracy,ica_test_accuracy,'+
+		        'rca_train_accuracy,rca_test_accuracy,'+
+		        'rf_train_accuracy,rf_test_accuracy\n')
+
+	transformed_train = [X_train, X_train_pca, X_train_ica, X_train_rca, X_train_rf]
+	transformed_test = [X_test, X_test_pca, X_test_ica, X_test_rca, X_test_rf]
+	for i in range(0, len(hidden_layer_sizes)):
+		print("Hidden layer {}".format(hidden_layer_sizes[i]))
+		output = '{}l{}u'.format(num_hidden_layers, num_hidden_units)
+
+		for j in range(0, len(transformed_train)):
+			TX_train = transformed_train[j]
+			TX_test = transformed_test[j]
+
+			# Computing k means
+			model = MLPClassifier(hidden_layer_sizes=hidden_layer_sizes[i], max_iter=2000)
+			model.fit(TX_train, Y_train)
+			Y_train_pred = model.predict(TX_train)
+			Y_test_pred = model.predict(TX_test)
+
+			# Computing metrics
+			train_acc = accuracy_score(Y_train, Y_train_pred)
+			test_acc = accuracy_score(Y_test, Y_test_pred)
+
+			# Appending to output
+			output = output + ',{},{}'.format(train_acc, test_acc)
+
+		# Logging metrics
+		with open(log_path, 'a') as f:
+			output = output + '\n'
+			f.write(output)
+
+
 def main():
 	processed_data_path = '../data/processed-pet-outcomes.csv'
 	df = pd.read_csv(processed_data_path)
 	X = df.iloc[:, :-1]
 	Y = df.iloc[:, -1]
-	kmeans(X, Y)
-	gmm(X, Y)
+	# kmeans(X, Y)
+	# gmm(X, Y)
+	# pca(X, Y)
+	# ica(X, Y)
+	# rca(X, Y)
+	# rf(X, Y)
+	# kmeans_after_red(X, Y)
+	# gmm_after_red(X, Y)
+	nn(X, Y)
 
 
 if __name__ == "__main__":
