@@ -141,8 +141,11 @@ def plot_kmeans_gmm_comparison():
 
 def plot_pca():
 	log_pca_filepath = '../logs/wine_pca.csv'
+	data_filepath = '../data/wine_pca.csv'
 	base_graphpath = '../graphs/wine_pca.png'
+	data_graphpath = '../graphs/wine_pca_2dim.png'
 	pca = pd.read_csv(log_pca_filepath)
+	data = pd.read_csv(data_filepath)
 
 	eigenvalues = pca['eigenvalues'].values
 	acc = pca['accuracy'].values
@@ -156,7 +159,7 @@ def plot_pca():
 	# Normalize variance
 	cum_variance = cum_variance / cum_variance.max()
 
-	# Plot all
+	# Plot metrics
 	components = np.arange(0, len(eigenvalues)) + 1
 	plt.figure()
 	plt.plot(components, cum_variance, label='Cumulative variance explained')
@@ -168,6 +171,17 @@ def plot_pca():
 	plt.grid(True)
 	plt.legend()
 	plt.savefig(base_graphpath, dpi=300)
+
+	# Plot 2 dimensions
+	plt.figure()
+	plt.title("Wine dataset's First Two Principal Components")
+	plt.scatter(data['principal1'], data['principal2'],
+	            c=data['labels'], edgecolor='none', alpha=0.5,
+	            cmap=plt.cm.get_cmap('spring', 2))
+	plt.xlabel('Principal 1')
+	plt.ylabel('Principal 2')
+	plt.colorbar()
+	plt.savefig(data_graphpath, dpi=300)
 
 
 def plot_ica():

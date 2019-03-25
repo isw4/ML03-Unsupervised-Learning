@@ -108,6 +108,12 @@ def pca(X, Y):
 			out = '{},{},{}\n'.format(i, eigenvalues[i], acc[i])
 			f.write(out)
 
+	# Logging transformed data (first 2 principal components)
+	trans_datapath = '../data/wine_pca.csv'
+	transformed2 = pd.DataFrame(TX_train[:, :2], columns=['principal1', 'principal2'])
+	transformed2['labels'] = Y_train
+	transformed2.to_csv(trans_datapath)
+
 
 def ica(X, Y):
 	print("Running ICA")
@@ -320,15 +326,14 @@ def main():
 	df = pd.read_csv(processed_data_path)
 	X = df.iloc[:, :-1]
 	Y = df.iloc[:, -1]
-	# kmeans(X, Y)
-	# gmm(X, Y)
-	# pca(X, Y)
-	# ica(X, Y)
-	# rca(X, Y)
-	# rf(X, Y)
-	# kmeans_after_red(X, Y)
-	# gmm_after_red(X, Y)
-	nn(X, Y)
+	kmeans(X, Y)
+	gmm(X, Y)
+	pca(X, Y)
+	ica(X, Y)
+	rca(X, Y)
+	rf(X, Y)
+	kmeans_after_red(X, Y)
+	gmm_after_red(X, Y)
 
 if __name__ == "__main__":
 	main()

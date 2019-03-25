@@ -110,6 +110,12 @@ def pca(X, Y):
 			out = '{},{},{}\n'.format(i, eigenvalues[i], acc[i])
 			f.write(out)
 
+	# Logging transformed data (first 2 principal components)
+	trans_datapath = '../data/pet_pca.csv'
+	transformed2 = pd.DataFrame(TX_train[:, :2], columns=['principal1', 'principal2'])
+	transformed2['labels'] = Y_train
+	transformed2.to_csv(trans_datapath)
+
 
 def ica(X, Y):
 	print("Running ICA")
@@ -316,98 +322,19 @@ def gmm_after_red(X, Y):
 			f.write(output)
 
 
-def nn(X, Y):
-	print("Running neural networks")
-
-	X_train, X_test, Y_train, Y_test = utils.split(X, Y)
-
-	# Hyper-parameters
-	num_hidden_layers = 10
-	num_hidden_units = 50
-	pca_num_components = 3
-	ica_num_components = 2
-	rca_num_components = 3
-	rf_num_components = 3
-
-
-	hidden_layer_sizes = []  ## nn parameter
-	for n in range(1, num_hidden_layers + 1):
-		hidden_layer_sizes.append(tuple(num_hidden_units for _ in range(n)))
-
-	# Dimension Reduction and transforming data to fit
-	pca = PCA(n_components=pca_num_components).fit(X_train)
-	X_train_pca = pca.transform(X_train)
-	X_test_pca = pca.transform(X_test)
-
-	ica = FastICA(n_components=ica_num_components).fit(X_train)
-	X_train_ica = ica.transform(X_train)
-	X_test_ica = ica.transform(X_test)
-
-	rca = GaussianRandomProjection(n_components=rca_num_components).fit(X_train)
-	X_train_rca = rca.transform(X_train)
-	X_test_rca = rca.transform(X_test)
-
-	print("RF fitting")
-	rf = RandomForestClassifier(n_estimators=100, max_depth=5, n_jobs=-1)
-	rf.fit(X_train, Y_train)
-	importances = rf.feature_importances_
-	sorted_impt = np.argsort(importances)[::-1]  # Sorted in dec order
-	X_train_rf = X_train.iloc[:, sorted_impt[:rf_num_components]]
-	X_test_rf = X_test.iloc[:, sorted_impt[:rf_num_components]]
-	print("RF fitting done")
-
-	# Opening log file
-	log_path = '../logs/pet_nnred_@shape@.csv'.replace('@shape@', '{}l{}u'.format(num_hidden_layers, num_hidden_units))
-	with open(log_path, 'w') as f:
-		f.write('model_shape,train_accuracy,test_accuracy,'+
-		        'pca_train_accuracy,pca_test_accuracy,'+
-		        'ica_train_accuracy,ica_test_accuracy,'+
-		        'rca_train_accuracy,rca_test_accuracy,'+
-		        'rf_train_accuracy,rf_test_accuracy\n')
-
-	transformed_train = [X_train, X_train_pca, X_train_ica, X_train_rca, X_train_rf]
-	transformed_test = [X_test, X_test_pca, X_test_ica, X_test_rca, X_test_rf]
-	for i in range(0, len(hidden_layer_sizes)):
-		print("Hidden layer {}".format(hidden_layer_sizes[i]))
-		output = '{}l{}u'.format(num_hidden_layers, num_hidden_units)
-
-		for j in range(0, len(transformed_train)):
-			TX_train = transformed_train[j]
-			TX_test = transformed_test[j]
-
-			# Computing k means
-			model = MLPClassifier(hidden_layer_sizes=hidden_layer_sizes[i], max_iter=2000)
-			model.fit(TX_train, Y_train)
-			Y_train_pred = model.predict(TX_train)
-			Y_test_pred = model.predict(TX_test)
-
-			# Computing metrics
-			train_acc = accuracy_score(Y_train, Y_train_pred)
-			test_acc = accuracy_score(Y_test, Y_test_pred)
-
-			# Appending to output
-			output = output + ',{},{}'.format(train_acc, test_acc)
-
-		# Logging metrics
-		with open(log_path, 'a') as f:
-			output = output + '\n'
-			f.write(output)
-
-
 def main():
 	processed_data_path = '../data/processed-pet-outcomes.csv'
 	df = pd.read_csv(processed_data_path)
 	X = df.iloc[:, :-1]
 	Y = df.iloc[:, -1]
-	# kmeans(X, Y)
-	# gmm(X, Y)
-	# pca(X, Y)
-	# ica(X, Y)
-	# rca(X, Y)
-	# rf(X, Y)
-	# kmeans_after_red(X, Y)
-	# gmm_after_red(X, Y)
-	nn(X, Y)
+	kmeans(X, Y)
+	gmm(X, Y)
+	pca(X, Y)
+	ica(X, Y)
+	rca(X, Y)
+	rf(X, Y)
+	kmeans_after_red(X, Y)
+	gmm_after_red(X, Y)
 
 
 if __name__ == "__main__":
