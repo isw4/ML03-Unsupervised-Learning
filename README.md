@@ -46,21 +46,13 @@ python ./src/data_processing.py
 To run the experiments:
 ~~~
 python ./src/wine.py
-~~~
-
-or
-
-~~~
 python ./src/pet.py
+python ./src/nn.py
 ~~~
 
 The data from the experiments will be saved into the ./logs/ directory. You can then plot the data with:
 ~~~
 python ./src/plot_wine.py
-~~~
-
-or
-
-~~~
 python ./src/plot_pet.py
+python ./src/plot_nn.py
 ~~~
